@@ -1,0 +1,615 @@
+const $ = (s) => document.querySelector(s);
+const $$ = (s) => [...document.querySelectorAll(s)];
+
+const defaultSettings = {
+  theme: 'midnight',
+  accent: 'violet',
+  openMode: 'split',
+  motion: 'rich',
+  sounds: true,
+  provider1: 'duckduckgo',
+  provider2: 'searx',
+  provider3: 'wikipedia',
+  resultAutoload: true,
+  timeoutMs: 6000,
+};
+
+const engineMeta = {
+  duckduckgo: { label: 'duckduckgo', icon: 'D' },
+  searx: { label: 'searx', icon: 'S' },
+  wikipedia: { label: 'wikipedia', icon: 'W' },
+};
+
+const state = {
+  token: sessionStorage.getItem('aura_token') || '',
+  user: null,
+  settings: { ...defaultSettings },
+  currentUrl: '',
+  currentTitle: '',
+  currentSearch: '',
+  currentResults: [],
+  currentNotice: '',
+  history: [],
+  historyIndex: -1,
+  bookmarks: JSON.parse(sessionStorage.getItem('aura_bookmarks') || '[]'),
+  audioOn: true,
+  listening: false,
+  currentMode: 'search',
+};
+
+function toast(title, text, type = '') {
+  const wrap = $('#toastWrap');
+  const el = document.createElement('div');
+  el.className = `toast ${type}`;
+  el.innerHTML = `<strong>${escapeHtml(title)}</strong><div>${escapeHtml(text)}</div>`;
+  wrap.appendChild(el);
+  setTimeout(() => el.remove(), 3200);
+}
+
+function setStatus(text) {
+  $('#statusPill').textContent = text;
+}
+
+function escapeHtml(value) {
+  return String(value).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+}
+
+function updateTheme() {
+  document.body.classList.remove('theme-midnight', 'theme-graphite', 'theme-sunset', 'accent-violet', 'accent-cyan', 'accent-rose', 'accent-amber', 'reduce-motion', 'open-external', 'open-internal');
+  document.body.classList.add(`theme-${state.settings.theme}`);
+  document.body.classList.add(`accent-${state.settings.accent}`);
+  if (state.settings.motion === 'reduced') document.body.classList.add('reduce-motion');
+  if (state.settings.openMode === 'external') document.body.classList.add('open-external');
+  if (state.settings.openMode === 'internal') document.body.classList.add('open-internal');
+  $('#statMode').textContent = state.settings.openMode;
+}
+
+function engineOrder() {
+  return [state.settings.provider1, state.settings.provider2, state.settings.provider3].filter(Boolean);
+}
+
+function engineMetaActive(name) {
+  return engineMeta[name] || { label: name || 'auto', icon: String(name || 'A').charAt(0).toUpperCase() };
+}
+
+function setEngineVisual(name) {
+  const meta = engineMetaActive(name);
+  $('#engineIcon').textContent = meta.icon;
+  $('#engineLabel').textContent = meta.label;
+  $('#heroEngineIcon').textContent = meta.icon;
+  $('#heroEngineLabel').textContent = meta.label;
+  $('#statEngine').textContent = meta.label;
+}
+
+function syncInputs(value = '') {
+  $('#navInput').value = value;
+  $('#heroInput').value = value;
+}
+
+function applyUserUi() {
+  const name = state.user?.displayName || 'Invitado';
+  const initial = (name[0] || 'I').toUpperCase();
+  $('#accountLabel').textContent = name;
+  $('#sideName').textContent = name;
+  $('#avatarTop').textContent = initial;
+  $('#avatarSide').textContent = initial;
+  $('#openAuthBtn').textContent = state.user ? 'Cambiar' : 'Entrar';
+  $('#logoutBtn').classList.toggle('hidden', !state.user);
+  $('#accountBtn').classList.toggle('logged', !!state.user);
+  $('#brandSmall').textContent = state.user ? `Cuenta: ${state.user.username}` : 'Búsqueda real con Netlify';
+}
+
+function saveBookmarksSession() {
+  sessionStorage.setItem('aura_bookmarks', JSON.stringify(state.bookmarks));
+}
+
+function renderHistory() {
+  $('#statHistory').textContent = String(state.history.length);
+  const root = $('#historyList');
+  root.innerHTML = '';
+  if (!state.history.length) {
+    root.innerHTML = `<div class="list-item"><small>Vacío por ahora</small></div>`;
+    return;
+  }
+  [...state.history].reverse().slice(0, 10).forEach(entry => {
+    const item = document.createElement('div');
+    item.className = 'list-item';
+    item.innerHTML = `<button type="button">${escapeHtml(entry.title || entry.url || entry.query || 'Elemento')}</button><small>${escapeHtml(entry.url || entry.query || '')}</small>`;
+    item.querySelector('button').onclick = () => {
+      if (entry.kind === 'search') submitSearch(entry.query, true);
+      if (entry.kind === 'page') openPage(entry.url, entry.title, true);
+    };
+    root.appendChild(item);
+  });
+}
+
+function renderBookmarks() {
+  const root = $('#bookmarkList');
+  root.innerHTML = '';
+  if (!state.bookmarks.length) {
+    root.innerHTML = `<div class="list-item"><small>No hay favoritos en esta sesión</small></div>`;
+    return;
+  }
+  [...state.bookmarks].reverse().forEach(entry => {
+    const item = document.createElement('div');
+    item.className = 'list-item';
+    item.innerHTML = `<button type="button">${escapeHtml(entry.title || entry.url)}</button><small>${escapeHtml(entry.url)}</small>`;
+    item.querySelector('button').onclick = () => openPage(entry.url, entry.title, true);
+    root.appendChild(item);
+  });
+}
+
+function beep(freq = 620, duration = 0.05) {
+  if (!state.audioOn || !state.settings.sounds) return;
+  try {
+    const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    const osc = audioCtx.createOscillator();
+    const gain = audioCtx.createGain();
+    osc.type = 'sine';
+    osc.frequency.value = freq;
+    gain.gain.value = 0.02;
+    osc.connect(gain);
+    gain.connect(audioCtx.destination);
+    osc.start();
+    osc.stop(audioCtx.currentTime + duration);
+  } catch {}
+}
+
+function showModal(id) { $(id).classList.remove('hidden'); }
+function hideModal(id) { $(id).classList.add('hidden'); }
+
+function closeAllOverlays() {
+  ['#authModal', '#settingsModal', '#menuDrawer'].forEach(id => hideModal(id));
+}
+
+async function api(path, options = {}) {
+  const headers = { 'content-type': 'application/json', ...(options.headers || {}) };
+  if (state.token) headers.authorization = `Bearer ${state.token}`;
+  const res = await fetch(path, { ...options, headers });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(data.error || 'Error');
+  return data;
+}
+
+async function restoreSession() {
+  if (!state.token) {
+    applySettingsToForm();
+    applyUserUi();
+    setEngineVisual(state.settings.provider1);
+    updateTheme();
+    renderHistory();
+    renderBookmarks();
+    return;
+  }
+  try {
+    const data = await api('/api/auth/me', { method: 'GET', headers: {} });
+    state.user = data.user;
+    state.settings = { ...defaultSettings, ...data.user.settings };
+    applySettingsToForm();
+    applyUserUi();
+    setEngineVisual(state.settings.provider1);
+    updateTheme();
+    toast('Sesión', `Entraste como ${data.user.username}`, 'success');
+  } catch {
+    sessionStorage.removeItem('aura_token');
+    state.token = '';
+  }
+  renderHistory();
+  renderBookmarks();
+}
+
+function applySettingsToForm() {
+  $('#setTheme').value = state.settings.theme;
+  $('#setAccent').value = state.settings.accent;
+  $('#setOpenMode').value = state.settings.openMode;
+  $('#setMotion').value = state.settings.motion;
+  $('#setProvider1').value = state.settings.provider1;
+  $('#setProvider2').value = state.settings.provider2;
+  $('#setProvider3').value = state.settings.provider3;
+  $('#setTimeoutMs').value = state.settings.timeoutMs;
+  $('#setSounds').checked = !!state.settings.sounds;
+  $('#setResultAutoload').checked = !!state.settings.resultAutoload;
+}
+
+function collectSettingsForm() {
+  return {
+    theme: $('#setTheme').value,
+    accent: $('#setAccent').value,
+    openMode: $('#setOpenMode').value,
+    motion: $('#setMotion').value,
+    provider1: $('#setProvider1').value,
+    provider2: $('#setProvider2').value,
+    provider3: $('#setProvider3').value,
+    timeoutMs: Number($('#setTimeoutMs').value || defaultSettings.timeoutMs),
+    sounds: $('#setSounds').checked,
+    resultAutoload: $('#setResultAutoload').checked,
+  };
+}
+
+async function saveSettings() {
+  const next = collectSettingsForm();
+  state.settings = { ...state.settings, ...next };
+  updateTheme();
+  setEngineVisual(state.settings.provider1);
+  if (state.user) {
+    await api('/api/settings', { method: 'PUT', body: JSON.stringify({ settings: state.settings }) });
+    toast('Ajustes', 'Se guardaron en tu cuenta.', 'success');
+  } else {
+    toast('Ajustes', 'Se aplicaron, pero sin cuenta no se guardan en el servidor.', 'warn');
+  }
+}
+
+async function login(username, password, endpoint) {
+  const data = await api(endpoint, { method: 'POST', body: JSON.stringify({ username, password }) });
+  state.token = data.token;
+  sessionStorage.setItem('aura_token', data.token);
+  state.user = data.user;
+  state.settings = { ...defaultSettings, ...data.user.settings };
+  applyUserUi();
+  applySettingsToForm();
+  updateTheme();
+  setEngineVisual(state.settings.provider1);
+  hideModal('#authModal');
+  toast('Cuenta', `${endpoint.includes('register') ? 'Cuenta creada' : 'Sesión iniciada'} correctamente.`, 'success');
+}
+
+function logout() {
+  state.token = '';
+  state.user = null;
+  sessionStorage.removeItem('aura_token');
+  state.settings = { ...defaultSettings };
+  applyUserUi();
+  applySettingsToForm();
+  updateTheme();
+  setEngineVisual(state.settings.provider1);
+  toast('Cuenta', 'Sesión cerrada.', 'success');
+}
+
+function looksLikeUrl(text) {
+  const q = String(text || '').trim();
+  return /^https?:\/\//i.test(q) || /^[\w-]+(\.[\w-]+)+([/?#].*)?$/i.test(q);
+}
+
+function normalizeUrl(text) {
+  const q = String(text || '').trim();
+  if (!q) return '';
+  if (/^https?:\/\//i.test(q)) return q;
+  if (/^[\w-]+(\.[\w-]+)+([/?#].*)?$/i.test(q)) return `https://${q}`;
+  return '';
+}
+
+function pushHistory(entry) {
+  state.history = state.history.slice(0, state.historyIndex + 1);
+  state.history.push(entry);
+  state.historyIndex = state.history.length - 1;
+  renderHistory();
+  updateNavButtons();
+}
+
+function updateNavButtons() {
+  $('#backBtn').disabled = state.historyIndex <= 0;
+  $('#forwardBtn').disabled = state.historyIndex >= state.history.length - 1;
+}
+
+function setHomeMode(on) {
+  document.body.classList.toggle('search-mode', !on);
+}
+
+async function submitSearch(rawQuery, fromHistory = false) {
+  const query = String(rawQuery || '').trim();
+  if (!query) return;
+  syncInputs(query);
+  if (looksLikeUrl(query)) {
+    const url = normalizeUrl(query);
+    openPage(url, url, fromHistory);
+    return;
+  }
+
+  state.currentMode = 'search';
+  state.currentSearch = query;
+  setHomeMode(false);
+  $('#resultsTitle').textContent = `Resultados para “${query}”`;
+  $('#resultsMeta').textContent = 'Buscando...';
+  $('#resultsList').innerHTML = `<div class="list-item"><small>Cargando resultados reales…</small></div>`;
+  $('#searchAlert').classList.add('hidden');
+  setStatus('Buscando');
+  beep(700, 0.04);
+
+  try {
+    const providers = engineOrder().join(',');
+    const res = await fetch(`/api/search?q=${encodeURIComponent(query)}&providers=${encodeURIComponent(providers)}`);
+    const data = await res.json();
+    state.currentResults = data.results || [];
+    state.currentNotice = data.notice || '';
+    setEngineVisual(data.providerUsed || state.settings.provider1);
+    $('#resultsMeta').textContent = `${state.currentResults.length} resultados · motor usado: ${data.providerUsed || 'auto'}`;
+    $('#statResults').textContent = String(state.currentResults.length);
+    renderResults();
+    if (data.notice) {
+      $('#searchAlert').textContent = data.notice;
+      $('#searchAlert').classList.remove('hidden');
+      toast('Motor', data.notice, 'warn');
+    }
+    setStatus('Resultados listos');
+    if (!fromHistory) pushHistory({ kind: 'search', query, title: `Búsqueda: ${query}` });
+    if (state.settings.resultAutoload && state.currentResults[0]) {
+      openPage(state.currentResults[0].url, state.currentResults[0].title, false);
+    }
+  } catch (error) {
+    $('#resultsMeta').textContent = 'No se pudo cargar la búsqueda.';
+    $('#resultsList').innerHTML = `<div class="list-item"><small>No se pudo obtener resultados.</small></div>`;
+    setStatus('Error de búsqueda');
+    toast('Búsqueda', 'Falló la búsqueda real del servidor.', 'error');
+  }
+}
+
+function renderResults() {
+  const root = $('#resultsList');
+  root.innerHTML = '';
+  if (!state.currentResults.length) {
+    root.innerHTML = `<div class="list-item"><small>No hubo resultados.</small></div>`;
+    return;
+  }
+  state.currentResults.forEach((item, index) => {
+    const card = document.createElement('article');
+    card.className = 'result-card';
+    card.innerHTML = `
+      <div class="result-main">
+        <h4>${escapeHtml(item.title || item.url)}</h4>
+        <p>${escapeHtml(item.content || 'Abrir este resultado dentro del visor o por fuera.')}</p>
+        <small>${escapeHtml(item.url)}</small>
+      </div>
+      <div class="result-actions">
+        <button class="action-btn primary">Abrir</button>
+        <button class="action-btn">Afuera</button>
+      </div>`;
+    const [openBtn, extBtn] = card.querySelectorAll('button');
+    openBtn.onclick = () => openPage(item.url, item.title || item.url, false);
+    extBtn.onclick = () => window.open(item.url, '_blank', 'noopener');
+    if (index === 0) openBtn.dataset.primary = 'true';
+    root.appendChild(card);
+  });
+}
+
+function setViewerMeta(title, url, status) {
+  state.currentTitle = title || 'Página';
+  state.currentUrl = url || '';
+  $('#viewerTitle').textContent = title || 'Página';
+  $('#viewerMeta').textContent = url || 'Sin URL';
+  $('#viewerStatus').textContent = status || 'Cargado';
+}
+
+function openPage(url, title = '', fromHistory = false) {
+  if (!url) return;
+  setHomeMode(false);
+  state.currentMode = 'page';
+  setViewerMeta(title || 'Abriendo…', url, 'Intentando cargar dentro del navegador…');
+
+  if (state.settings.openMode === 'external') {
+    window.open(url, '_blank', 'noopener');
+    setViewerMeta(title || 'Abierto afuera', url, 'La página se abrió afuera por configuración.');
+  } else {
+    const frameUrl = `/api/proxy?url=${encodeURIComponent(url)}`;
+    $('#viewerFrame').src = frameUrl;
+  }
+
+  if (!fromHistory) pushHistory({ kind: 'page', url, title: title || url });
+  beep(520, 0.03);
+}
+
+function navigateHistory(direction) {
+  const next = state.historyIndex + direction;
+  if (next < 0 || next >= state.history.length) return;
+  state.historyIndex = next;
+  const entry = state.history[next];
+  updateNavButtons();
+  if (entry.kind === 'search') submitSearch(entry.query, true);
+  if (entry.kind === 'page') openPage(entry.url, entry.title, true);
+}
+
+function goHome() {
+  setHomeMode(true);
+  setViewerMeta('Visor', '', 'Usa la barra para buscar o pega una URL.');
+  $('#viewerFrame').src = 'about:blank';
+  state.currentUrl = '';
+  state.currentTitle = '';
+  setStatus('Inicio');
+}
+
+function copyText(text, ok = 'Copiado') {
+  navigator.clipboard.writeText(text).then(() => toast('Copiado', ok, 'success')).catch(() => toast('Copiado', 'No se pudo copiar.', 'error'));
+}
+
+function startVoice(target) {
+  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+  if (!SR) {
+    toast('Micrófono', 'Este navegador no soporta búsqueda por voz.', 'error');
+    return;
+  }
+  if (state.listening) return;
+  const rec = new SR();
+  rec.lang = 'es-CO';
+  rec.interimResults = false;
+  rec.maxAlternatives = 1;
+  state.listening = true;
+  setStatus('Escuchando');
+  toast('Micrófono', 'Habla ahora.', 'success');
+  rec.onresult = (event) => {
+    const text = event.results?.[0]?.[0]?.transcript || '';
+    target.value = text;
+    syncInputs(text);
+    submitSearch(text);
+  };
+  rec.onerror = () => toast('Micrófono', 'No se pudo usar el audio.', 'error');
+  rec.onend = () => {
+    state.listening = false;
+    setStatus('Listo');
+  };
+  rec.start();
+}
+
+function speakCurrent() {
+  if (!window.speechSynthesis) {
+    toast('Lectura', 'Tu navegador no soporta esta función.', 'error');
+    return;
+  }
+  const lines = [];
+  if (state.currentSearch) lines.push(`Búsqueda actual: ${state.currentSearch}`);
+  if (state.currentTitle) lines.push(`Página actual: ${state.currentTitle}`);
+  const cards = $$('.result-card h4').slice(0, 5).map(el => el.textContent.trim()).filter(Boolean);
+  if (cards.length) lines.push(`Resultados visibles: ${cards.join('. ')}`);
+  const text = lines.join('. ');
+  if (!text) {
+    toast('Lectura', 'No hay texto visible para leer.', 'warn');
+    return;
+  }
+  window.speechSynthesis.cancel();
+  const utter = new SpeechSynthesisUtterance(text);
+  utter.lang = 'es-CO';
+  utter.rate = 0.95;
+  window.speechSynthesis.speak(utter);
+  toast('Lectura', 'Leyendo lo visible.', 'success');
+}
+
+function bindProxyMessages() {
+  window.addEventListener('message', (event) => {
+    if (!event.data || typeof event.data !== 'object') return;
+    if (event.data.type === 'proxy-loaded') {
+      setViewerMeta(event.data.title || state.currentTitle || 'Página', event.data.url || state.currentUrl, 'Página cargada dentro del navegador.');
+      setStatus('Página cargada');
+    }
+    if (event.data.type === 'proxy-navigate' && event.data.url) {
+      openPage(event.data.url, event.data.url, false);
+    }
+  });
+
+  $('#viewerFrame').addEventListener('load', () => {
+    if (!state.currentUrl) return;
+    $('#viewerStatus').textContent = 'Visor activo';
+  });
+}
+
+function bindEvents() {
+  $('#menuBtn').onclick = () => showModal('#menuDrawer');
+  $('#closeDrawerBtn').onclick = closeAllOverlays;
+  $$('[data-close]').forEach(btn => btn.onclick = () => hideModal(`#${btn.dataset.close}`));
+
+  $('#openAuthBtn').onclick = () => showModal('#authModal');
+  $('#accountBtn').onclick = () => showModal('#authModal');
+  $('#heroAccountBtn').onclick = () => showModal('#authModal');
+  $('#openSettingsBtn').onclick = () => showModal('#settingsModal');
+  $('#heroSettingsBtn').onclick = () => showModal('#settingsModal');
+  $('#drawerSettingsBtn').onclick = () => { hideModal('#menuDrawer'); showModal('#settingsModal'); };
+  $('#drawerAccountBtn').onclick = () => { hideModal('#menuDrawer'); showModal('#authModal'); };
+  $('#drawerNewSearchBtn').onclick = () => { closeAllOverlays(); goHome(); $('#heroInput').focus(); };
+  $('#drawerBookmarksBtn').onclick = () => { closeAllOverlays(); document.querySelector('#bookmarkList')?.scrollIntoView({ behavior: 'smooth' }); };
+  $('#drawerHistoryBtn').onclick = () => { closeAllOverlays(); document.querySelector('#historyList')?.scrollIntoView({ behavior: 'smooth' }); };
+  $('#drawerVoiceBtn').onclick = () => { closeAllOverlays(); startVoice(document.body.classList.contains('search-mode') ? $('#navInput') : $('#heroInput')); };
+
+  $$('.tab').forEach(tab => tab.onclick = () => {
+    $$('.tab').forEach(t => t.classList.remove('active'));
+    tab.classList.add('active');
+    const register = tab.dataset.authTab === 'register';
+    $('#loginPane').classList.toggle('hidden', register);
+    $('#registerPane').classList.toggle('hidden', !register);
+  });
+
+  $('#loginBtn').onclick = async () => {
+    try { await login($('#loginUser').value, $('#loginPass').value, '/api/auth/login'); }
+    catch (error) { toast('Cuenta', error.message, 'error'); }
+  };
+  $('#registerBtn').onclick = async () => {
+    try { await login($('#registerUser').value, $('#registerPass').value, '/api/auth/register'); }
+    catch (error) { toast('Cuenta', error.message, 'error'); }
+  };
+  $('#logoutBtn').onclick = logout;
+
+  $('#saveSettingsBtn').onclick = async () => {
+    try { await saveSettings(); hideModal('#settingsModal'); }
+    catch (error) { toast('Ajustes', error.message, 'error'); }
+  };
+  $('#resetSettingsBtn').onclick = () => {
+    state.settings = { ...defaultSettings };
+    applySettingsToForm();
+    updateTheme();
+    setEngineVisual(state.settings.provider1);
+    toast('Ajustes', 'Se restablecieron en la vista. Guarda si quieres dejarlos fijos.', 'warn');
+  };
+
+  $('#heroForm').onsubmit = (e) => { e.preventDefault(); submitSearch($('#heroInput').value); };
+  $('#navForm').onsubmit = (e) => { e.preventDefault(); submitSearch($('#navInput').value); };
+  $('#heroStartBtn').onclick = () => submitSearch($('#heroInput').value || 'openai');
+  $('#voiceBtn').onclick = () => startVoice($('#navInput'));
+  $('#heroVoiceBtn').onclick = () => startVoice($('#heroInput'));
+  $('#speakBtn').onclick = speakCurrent;
+
+  $('#backBtn').onclick = () => navigateHistory(-1);
+  $('#forwardBtn').onclick = () => navigateHistory(1);
+  $('#reloadBtn').onclick = () => {
+    if (state.currentMode === 'page' && state.currentUrl) openPage(state.currentUrl, state.currentTitle, true);
+    else if (state.currentMode === 'search' && state.currentSearch) submitSearch(state.currentSearch, true);
+  };
+  $('#homeBtn').onclick = goHome;
+
+  $('#outsideBtn').onclick = () => {
+    if (!state.currentUrl) return toast('Abrir afuera', 'No hay una página abierta.', 'warn');
+    window.open(state.currentUrl, '_blank', 'noopener');
+  };
+  $('#floatBtn').onclick = () => {
+    if (!state.currentUrl) return toast('Flotante', 'No hay una página abierta.', 'warn');
+    window.open(state.currentUrl, 'AuraOrbitFloat', 'width=1200,height=800,noopener');
+  };
+  $('#audioBtn').onclick = () => {
+    state.audioOn = !state.audioOn;
+    $('#audioBtn').textContent = state.audioOn ? 'Audio on' : 'Audio off';
+    beep(660, 0.04);
+  };
+
+  $('#copySearchBtn').onclick = () => copyText(state.currentSearch || '', 'Búsqueda copiada');
+  $('#copyUrlBtn').onclick = () => copyText(state.currentUrl || '', 'URL copiada');
+  $('#duplicateBtn').onclick = () => state.currentUrl ? openPage(state.currentUrl, state.currentTitle, false) : toast('Duplicar', 'No hay página abierta.', 'warn');
+  $('#bookmarkCurrentBtn').onclick = () => {
+    if (!state.currentUrl) return toast('Favoritos', 'No hay página abierta.', 'warn');
+    if (state.bookmarks.some(item => item.url === state.currentUrl)) return toast('Favoritos', 'Ya estaba guardado en esta sesión.', 'warn');
+    state.bookmarks.push({ url: state.currentUrl, title: state.currentTitle || state.currentUrl });
+    saveBookmarksSession();
+    renderBookmarks();
+    toast('Favoritos', 'Guardado en esta sesión.', 'success');
+  };
+
+  $('#clearHistoryBtn').onclick = () => {
+    state.history = [];
+    state.historyIndex = -1;
+    renderHistory();
+    updateNavButtons();
+    toast('Historial', 'Historial de sesión borrado.', 'success');
+  };
+  $('#clearSessionBtn').onclick = () => {
+    state.history = [];
+    state.historyIndex = -1;
+    state.bookmarks = [];
+    sessionStorage.removeItem('aura_bookmarks');
+    renderHistory();
+    renderBookmarks();
+    updateNavButtons();
+    toast('Sesión', 'Se limpió historial y favoritos de la sesión.', 'success');
+  };
+  $('#autoloadBtn').onclick = () => {
+    state.settings.resultAutoload = !state.settings.resultAutoload;
+    $('#autoloadBtn').textContent = `Auto abrir: ${state.settings.resultAutoload ? 'sí' : 'no'}`;
+  };
+}
+
+(async function init() {
+  bindEvents();
+  bindProxyMessages();
+  applyUserUi();
+  applySettingsToForm();
+  updateTheme();
+  setEngineVisual(state.settings.provider1);
+  renderHistory();
+  renderBookmarks();
+  updateNavButtons();
+  await restoreSession();
+  $('#autoloadBtn').textContent = `Auto abrir: ${state.settings.resultAutoload ? 'sí' : 'no'}`;
+})();

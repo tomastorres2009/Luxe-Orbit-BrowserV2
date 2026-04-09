@@ -1,0 +1,40 @@
+[build]
+  publish = "public"
+  functions = "netlify/functions"
+
+[[headers]]
+  for = "/*"
+  [headers.values]
+    Cache-Control = "no-store, no-cache, must-revalidate, max-age=0"
+    X-Content-Type-Options = "nosniff"
+    Referrer-Policy = "no-referrer"
+
+[[redirects]]
+  from = "/api/auth/register"
+  to = "/.netlify/functions/auth-register"
+  status = 200
+
+[[redirects]]
+  from = "/api/auth/login"
+  to = "/.netlify/functions/auth-login"
+  status = 200
+
+[[redirects]]
+  from = "/api/auth/me"
+  to = "/.netlify/functions/auth-me"
+  status = 200
+
+[[redirects]]
+  from = "/api/settings"
+  to = "/.netlify/functions/settings"
+  status = 200
+
+[[redirects]]
+  from = "/api/search"
+  to = "/.netlify/functions/search"
+  status = 200
+
+[[redirects]]
+  from = "/api/proxy"
+  to = "/.netlify/functions/proxy"
+  status = 200

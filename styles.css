@@ -1,0 +1,326 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <meta name="theme-color" content="#0b1020" />
+  <title>Aura Orbit Browser</title>
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+  <link rel="stylesheet" href="/styles.css" />
+</head>
+<body class="theme-midnight accent-violet home-center">
+  <div class="bg-orb orb-a"></div>
+  <div class="bg-orb orb-b"></div>
+  <div class="bg-grid"></div>
+
+  <div class="shell">
+    <header class="topbar glass">
+      <div class="top-left">
+        <div class="brand-lockup">
+          <button class="menu-btn" id="menuBtn" aria-label="Abrir menú">
+            <span></span><span></span><span></span>
+          </button>
+          <div class="brand-logo" aria-hidden="true">
+            <div class="brand-ring"></div>
+            <div class="brand-dot"></div>
+          </div>
+          <div class="brand-copy">
+            <strong>Aura Orbit</strong>
+            <small id="brandSmall">Búsqueda real con servidor</small>
+          </div>
+        </div>
+      </div>
+
+      <div class="toolbar" id="toolbar">
+        <div class="nav-buttons left-pack">
+          <button class="nav-btn" id="backBtn" title="Atrás">←</button>
+          <button class="nav-btn" id="forwardBtn" title="Adelante">→</button>
+          <button class="nav-btn" id="reloadBtn" title="Recargar">↻</button>
+          <button class="nav-btn" id="homeBtn" title="Inicio">⌂</button>
+        </div>
+
+        <form id="navForm" class="omnibox glass-strong">
+          <div class="engine-pill" id="enginePill">
+            <span class="engine-icon" id="engineIcon">D</span>
+            <span id="engineLabel">duckduckgo</span>
+          </div>
+          <input id="navInput" type="text" placeholder="Busca o pega una URL" autocomplete="off" spellcheck="false" />
+          <button type="button" class="mini-icon" id="voiceBtn" title="Buscar por voz">🎤</button>
+          <button type="button" class="mini-icon" id="speakBtn" title="Leer visible">🔊</button>
+          <button type="submit" class="go-btn">Ir</button>
+        </form>
+
+        <div class="nav-buttons right-pack">
+          <button class="action-btn" id="audioBtn">Audio on</button>
+          <button class="action-btn" id="floatBtn">Flotante</button>
+          <button class="action-btn primary" id="outsideBtn">Abrir afuera</button>
+        </div>
+      </div>
+
+      <div class="top-right">
+        <div class="status-pill" id="statusPill">Listo</div>
+        <button class="profile-pill" id="accountBtn">
+          <span class="avatar" id="avatarTop">I</span>
+          <span id="accountLabel">Invitado</span>
+        </button>
+      </div>
+    </header>
+
+    <main class="main-layout">
+      <aside class="sidebar glass" id="sidebar">
+        <section class="side-block premium">
+          <div class="side-head">
+            <h3>Cuenta</h3>
+            <button class="tiny-btn" id="openAuthBtn">Entrar</button>
+          </div>
+          <div class="account-card">
+            <div class="avatar large" id="avatarSide">I</div>
+            <div>
+              <strong id="sideName">Invitado</strong>
+              <p id="sideSub">Los ajustes se guardan por cuenta. El historial es solo de sesión.</p>
+            </div>
+          </div>
+          <div class="side-actions">
+            <button class="action-btn primary" id="openSettingsBtn">Ajustes</button>
+            <button class="action-btn hidden" id="logoutBtn">Salir</button>
+          </div>
+        </section>
+
+        <section class="side-block">
+          <div class="side-head">
+            <h3>Sesión</h3>
+            <button class="tiny-btn" id="clearSessionBtn">Borrar</button>
+          </div>
+          <div class="stats-grid">
+            <div class="stat"><span>Motor</span><strong id="statEngine">duckduckgo</strong></div>
+            <div class="stat"><span>Resultados</span><strong id="statResults">0</strong></div>
+            <div class="stat"><span>Historial</span><strong id="statHistory">0</strong></div>
+            <div class="stat"><span>Modo</span><strong id="statMode">split</strong></div>
+          </div>
+        </section>
+
+        <section class="side-block">
+          <div class="side-head">
+            <h3>Historial</h3>
+            <button class="tiny-btn" id="clearHistoryBtn">Vaciar</button>
+          </div>
+          <div class="list-box" id="historyList"></div>
+        </section>
+
+        <section class="side-block">
+          <div class="side-head">
+            <h3>Favoritos</h3>
+            <button class="tiny-btn" id="bookmarkCurrentBtn">+</button>
+          </div>
+          <div class="list-box" id="bookmarkList"></div>
+        </section>
+      </aside>
+
+      <section class="workspace">
+        <section class="hero glass-strong" id="hero">
+          <div class="hero-left">
+            <div class="hero-badges">
+              <span>Netlify Functions</span>
+              <span>Búsqueda real</span>
+              <span>Proxy interno</span>
+              <span>Cuentas y ajustes</span>
+            </div>
+            <h1>Busca y navega con base Netlify real</h1>
+            <p>La barra empieza en el centro. Cuando buscas, sube arriba y el navegador trabaja con Functions para búsqueda, cuenta y ajustes.</p>
+            <form id="heroForm" class="hero-search glass-strong">
+              <div class="hero-engine">
+                <span class="engine-icon big" id="heroEngineIcon">D</span>
+                <div>
+                  <strong id="heroEngineLabel">duckduckgo</strong>
+                  <small>cambio automático si falla</small>
+                </div>
+              </div>
+              <input id="heroInput" type="text" placeholder="Busca aquí" autocomplete="off" spellcheck="false" />
+              <button type="button" class="mini-icon" id="heroVoiceBtn">🎤</button>
+              <button type="submit" class="go-btn">Buscar</button>
+            </form>
+            <div class="hero-actions">
+              <button class="action-btn primary" id="heroStartBtn">Empezar</button>
+              <button class="action-btn" id="heroSettingsBtn">Personalizar</button>
+              <button class="action-btn" id="heroAccountBtn">Mi cuenta</button>
+            </div>
+          </div>
+          <div class="hero-right">
+            <div class="mock-window">
+              <div class="mock-top">
+                <span></span><span></span><span></span>
+                <div class="mock-bar">aura-orbit://search</div>
+              </div>
+              <div class="mock-body">
+                <div class="mock-row"></div>
+                <div class="mock-row short"></div>
+                <div class="mock-card"></div>
+                <div class="mock-card tall"></div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <section class="content-grid" id="contentGrid">
+          <section class="results-panel glass" id="resultsPanel">
+            <div class="section-head">
+              <div>
+                <h2 id="resultsTitle">Resultados</h2>
+                <p id="resultsMeta">Todavía no hay una búsqueda activa.</p>
+              </div>
+              <div class="result-tools">
+                <button class="tiny-btn" id="autoloadBtn">Auto abrir: sí</button>
+                <button class="tiny-btn" id="copySearchBtn">Copiar búsqueda</button>
+              </div>
+            </div>
+            <div class="alert hidden" id="searchAlert"></div>
+            <div class="results-list" id="resultsList"></div>
+          </section>
+
+          <section class="viewer-panel glass" id="viewerPanel">
+            <div class="section-head viewer-head">
+              <div>
+                <h2 id="viewerTitle">Visor</h2>
+                <p id="viewerMeta">Sin página abierta</p>
+              </div>
+              <div class="viewer-actions">
+                <button class="tiny-btn" id="copyUrlBtn">Copiar URL</button>
+                <button class="tiny-btn" id="duplicateBtn">Duplicar</button>
+              </div>
+            </div>
+            <div class="viewer-status" id="viewerStatus">Usa la barra para buscar o pega una URL.</div>
+            <div class="viewer-frame-wrap" id="viewerWrap">
+              <iframe id="viewerFrame" title="Visor"></iframe>
+            </div>
+          </section>
+        </section>
+      </section>
+    </main>
+  </div>
+
+  <div class="drawer hidden" id="menuDrawer">
+    <div class="drawer-card glass-strong">
+      <div class="drawer-head">
+        <strong>Menú</strong>
+        <button class="tiny-btn" id="closeDrawerBtn">Cerrar</button>
+      </div>
+      <div class="drawer-grid">
+        <button class="drawer-btn" id="drawerSettingsBtn">Ajustes</button>
+        <button class="drawer-btn" id="drawerAccountBtn">Cuenta</button>
+        <button class="drawer-btn" id="drawerNewSearchBtn">Nueva búsqueda</button>
+        <button class="drawer-btn" id="drawerBookmarksBtn">Favoritos</button>
+        <button class="drawer-btn" id="drawerHistoryBtn">Historial</button>
+        <button class="drawer-btn" id="drawerVoiceBtn">Buscar por voz</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="modal hidden" id="authModal">
+    <div class="modal-card glass-strong">
+      <div class="modal-head">
+        <strong>Cuenta</strong>
+        <button class="tiny-btn" data-close="authModal">Cerrar</button>
+      </div>
+      <div class="tabs">
+        <button class="tab active" data-auth-tab="login">Entrar</button>
+        <button class="tab" data-auth-tab="register">Crear</button>
+      </div>
+      <div class="auth-body" id="loginPane">
+        <label>Usuario</label>
+        <input id="loginUser" type="text" placeholder="tu_usuario" />
+        <label>Contraseña</label>
+        <input id="loginPass" type="password" placeholder="••••" />
+        <button class="go-btn wide" id="loginBtn">Entrar</button>
+      </div>
+      <div class="auth-body hidden" id="registerPane">
+        <label>Usuario</label>
+        <input id="registerUser" type="text" placeholder="nuevo_usuario" />
+        <label>Contraseña</label>
+        <input id="registerPass" type="password" placeholder="••••" />
+        <button class="go-btn wide" id="registerBtn">Crear cuenta</button>
+      </div>
+      <div class="modal-note" id="authNote">Tu cuenta se guarda. El historial no.</div>
+    </div>
+  </div>
+
+  <div class="modal hidden" id="settingsModal">
+    <div class="modal-card large glass-strong">
+      <div class="modal-head">
+        <strong>Ajustes personalizables</strong>
+        <button class="tiny-btn" data-close="settingsModal">Cerrar</button>
+      </div>
+      <div class="settings-grid">
+        <label>Tema
+          <select id="setTheme">
+            <option value="midnight">Midnight</option>
+            <option value="graphite">Graphite</option>
+            <option value="sunset">Sunset</option>
+          </select>
+        </label>
+        <label>Acento
+          <select id="setAccent">
+            <option value="violet">Violet</option>
+            <option value="cyan">Cyan</option>
+            <option value="rose">Rose</option>
+            <option value="amber">Amber</option>
+          </select>
+        </label>
+        <label>Modo de apertura
+          <select id="setOpenMode">
+            <option value="split">Split</option>
+            <option value="internal">Interno</option>
+            <option value="external">Afuera</option>
+          </select>
+        </label>
+        <label>Movimiento
+          <select id="setMotion">
+            <option value="rich">Con animación</option>
+            <option value="reduced">Reducido</option>
+          </select>
+        </label>
+        <label>Motor 1
+          <select id="setProvider1">
+            <option value="duckduckgo">DuckDuckGo</option>
+            <option value="searx">SearX</option>
+            <option value="wikipedia">Wikipedia</option>
+          </select>
+        </label>
+        <label>Motor 2
+          <select id="setProvider2">
+            <option value="duckduckgo">DuckDuckGo</option>
+            <option value="searx">SearX</option>
+            <option value="wikipedia">Wikipedia</option>
+          </select>
+        </label>
+        <label>Motor 3
+          <select id="setProvider3">
+            <option value="duckduckgo">DuckDuckGo</option>
+            <option value="searx">SearX</option>
+            <option value="wikipedia">Wikipedia</option>
+          </select>
+        </label>
+        <label>Espera del motor (ms)
+          <input id="setTimeoutMs" type="number" min="2500" max="12000" step="500" />
+        </label>
+        <label class="toggle-row">
+          <input id="setSounds" type="checkbox" />
+          <span>Sonidos</span>
+        </label>
+        <label class="toggle-row">
+          <input id="setResultAutoload" type="checkbox" />
+          <span>Abrir primer resultado</span>
+        </label>
+      </div>
+      <div class="modal-actions">
+        <button class="action-btn" id="resetSettingsBtn">Restablecer</button>
+        <button class="go-btn" id="saveSettingsBtn">Guardar ajustes</button>
+      </div>
+      <div class="modal-note">Estos ajustes sí se guardan dentro de tu cuenta.</div>
+    </div>
+  </div>
+
+  <div class="toast-wrap" id="toastWrap"></div>
+
+  <script src="/app.js"></script>
+</body>
+</html>
